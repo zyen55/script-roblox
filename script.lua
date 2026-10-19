@@ -1,14 +1,14 @@
--- Skrip Delta Executor (Kontrol Fly Mengikuti Kamera)
+-- Skrip Delta Executor (Fly + WalkSpeed + Atur Kecepatan)
 local player = game:GetService("Players").LocalPlayer
 local runService = game:GetService("RunService")
 local userInput = game:GetService("UserInputService")
 
 local flyEnabled = false
 local noclipEnabled = false
-local flySpeed = 65
-
-local bodyVelocity = nil
-local bodyGyro = nil
+local walkEnabled = false
+local flySpeed = 30
+local walkSpeed = 32
+local defaultWalkSpeed = 16
 local isDescending = false
 
 -- ==========================================
@@ -20,7 +20,7 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 220, 0, 200)
+mainFrame.Size = UDim2.new(0, 220, 0, 280)
 mainFrame.Position = UDim2.new(0, 20, 0, 100)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
@@ -38,56 +38,32 @@ title.Font = Enum.Font.SourceSansBold
 title.TextSize = 16
 title.Parent = mainFrame
 
-local minBtn = Instance.new("TextButton")
-minBtn.Size = UDim2.new(0, 30, 0, 30)
-minBtn.Position = UDim2.new(1, -60, 0, 0)
-minBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
-minBtn.Text = "-"
-minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-minBtn.Font = Enum.Font.SourceSansBold
-minBtn.TextSize = 20
-minBtn.Parent = mainFrame
+local function makeButton(text, pos, size, color, textSize)
+    local b = Instance.new("TextButton")
+    b.Size = size
+    b.Position = pos
+    b.BackgroundColor3 = color
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.SourceSansBold
+    b.TextSize = textSize or 16
+    b.Parent = mainFrame
+    return b
+end
 
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -30, 0, 0)
-closeBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-closeBtn.Text = "X"
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.Font = Enum.Font.SourceSansBold
-closeBtn.TextSize = 16
-closeBtn.Parent = mainFrame
+local minBtn = makeButton("-", UDim2.new(1, -60, 0, 0), UDim2.new(0, 30, 0, 30), Color3.fromRGB(200, 150, 50), 20)
+local closeBtn = makeButton("X", UDim2.new(1, -30, 0, 0), UDim2.new(0, 30, 0, 30), Color3.fromRGB(150, 50, 50), 16)
 
-local flyButton = Instance.new("TextButton")
-flyButton.Size = UDim2.new(0.9, 0, 0, 35)
-flyButton.Position = UDim2.new(0.05, 0, 0, 45)
-flyButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-flyButton.Text = "Fly: OFF"
-flyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-flyButton.Font = Enum.Font.SourceSansBold
-flyButton.TextSize = 16
-flyButton.Parent = mainFrame
+local btnSize = UDim2.new(0.9, 0, 0, 32)
+local grey = Color3.fromRGB(70, 70, 70)
 
-local noclipButton = Instance.new("TextButton")
-noclipButton.Size = UDim2.new(0.9, 0, 0, 35)
-noclipButton.Position = UDim2.new(0.05, 0, 0, 95)
-noclipButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-noclipButton.Text = "NoClip: OFF"
-noclipButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-noclipButton.Font = Enum.Font.SourceSansBold
-noclipButton.TextSize = 16
-noclipButton.Parent = mainFrame
-
-local descendBtn = Instance.new("TextButton")
-descendBtn.Size = UDim2.new(0.9, 0, 0, 35)
-descendBtn.Position = UDim2.new(0.05, 0, 0, 145)
-descendBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
-descendBtn.Text = "Tahan untuk Turun"
-descendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-descendBtn.Font = Enum.Font.SourceSansBold
-descendBtn.TextSize = 14
+local flyButton = makeButton("Fly: OFF", UDim2.new(0.05, 0, 0, 40), btnSize, grey)
+-- baris atur fly speed ada di y = 78
+local noclipButton = makeButton("NoClip: OFF", UDim2.new(0.05, 0, 0, 116), btnSize, grey)
+local walkButton = makeButton("WalkSpeed: OFF", UDim2.new(0.05, 0, 0, 154), btnSize, grey)
+-- baris atur walk speed ada di y = 192
+local descendBtn = makeButton("Tahan untuk Turun", UDim2.new(0.05, 0, 0, 232), btnSize, Color3.fromRGB(100, 100, 200), 14)
 descendBtn.Visible = false
-descendBtn.Parent = mainFrame
 
 local floatingBtn = Instance.new("TextButton")
 floatingBtn.Size = UDim2.new(0, 45, 0, 45)
@@ -107,34 +83,59 @@ descendBtn.MouseButton1Up:Connect(function() isDescending = false end)
 descendBtn.MouseLeave:Connect(function() isDescending = false end)
 
 -- ==========================================
+-- BARIS ATUR KECEPATAN (- nilai +)
+-- ==========================================
+local function createSpeedRow(yPos, name, getValue, setValue, step, minV, maxV)
+    local minus = makeButton("-", UDim2.new(0.05, 0, 0, yPos), UDim2.new(0.2, 0, 0, 30), Color3.fromRGB(150, 70, 70), 20)
+    local plus = makeButton("+", UDim2.new(0.75, 0, 0, yPos), UDim2.new(0.2, 0, 0, 30), Color3.fromRGB(70, 150, 70), 20)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.44, 0, 0, 30)
+    label.Position = UDim2.new(0.28, 0, 0, yPos)
+    label.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 14
+    label.Parent = mainFrame
+
+    local function refresh()
+        label.Text = name .. ": " .. getValue()
+    end
+    refresh()
+
+    minus.MouseButton1Click:Connect(function()
+        setValue(math.max(minV, getValue() - step))
+        refresh()
+    end)
+    plus.MouseButton1Click:Connect(function()
+        setValue(math.min(maxV, getValue() + step))
+        refresh()
+    end)
+end
+
+createSpeedRow(78, "Fly Speed",
+    function() return flySpeed end,
+    function(v) flySpeed = v end,
+    5, 5, 200)
+
+createSpeedRow(192, "Walk Speed",
+    function() return walkSpeed end,
+    function(v) walkSpeed = v end,
+    4, 16, 200)
+
+-- ==========================================
 -- FUNGSI FLY
 -- ==========================================
 local function updateFlyPhysics()
     local character = player.Character
     if not character then return end
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
     local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
 
-    if flyEnabled and rootPart and humanoid then
-        humanoid.PlatformStand = true
-        if bodyVelocity then bodyVelocity:Destroy() end
-        if bodyGyro then bodyGyro:Destroy() end
-
-        bodyVelocity = Instance.new("BodyVelocity")
-        bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        bodyVelocity.Parent = rootPart
-
-        bodyGyro = Instance.new("BodyGyro")
-        bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bodyGyro.P = 1000
-        bodyGyro.D = 50
-        bodyGyro.CFrame = rootPart.CFrame
-        bodyGyro.Parent = rootPart
+    if flyEnabled then
+        humanoid:ChangeState(Enum.HumanoidStateType.Physics)
     else
-        if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
-        if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
-        if humanoid then humanoid.PlatformStand = false end
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 end
 
@@ -145,10 +146,7 @@ flyButton.MouseButton1Click:Connect(function()
     updateFlyPhysics()
 end)
 
--- ==========================================
--- LOGIKA PERGERAKAN (MENGIKUTI KAMERA)
--- ==========================================
-runService.RenderStepped:Connect(function()
+runService.Heartbeat:Connect(function(dt)
     if not flyEnabled then return end
 
     local character = player.Character
@@ -156,73 +154,36 @@ runService.RenderStepped:Connect(function()
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     local cam = workspace.CurrentCamera
+    if not (humanoid and rootPart and cam) then return end
 
-    if humanoid and rootPart and bodyVelocity and bodyGyro and cam then
-        -- Ubah arah joystick (world space) ke input maju/kanan relatif kamera
-        local localMove = cam.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
-        local forwardAmount = -localMove.Z
-        local rightAmount = localMove.X
+    local localMove = cam.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
+    local moveDir = (cam.CFrame.LookVector * -localMove.Z)
+                  + (cam.CFrame.RightVector * localMove.X)
 
-        local moveDir = (cam.CFrame.LookVector * forwardAmount)
-                      + (cam.CFrame.RightVector * rightAmount)
+    if userInput:IsKeyDown(Enum.KeyCode.Space) or humanoid.Jump then
+        moveDir = moveDir + Vector3.new(0, 1, 0)
+    end
+    if isDescending then
+        moveDir = moveDir - Vector3.new(0, 1, 0)
+    end
 
-        -- Naik (Spasi / tombol lompat)
-        if userInput:IsKeyDown(Enum.KeyCode.Space) or humanoid.Jump then
-            moveDir = moveDir + Vector3.new(0, 1, 0)
-        end
+    rootPart.AssemblyLinearVelocity = Vector3.zero
+    rootPart.AssemblyAngularVelocity = Vector3.zero
 
-        -- Turun (tombol GUI)
-        if isDescending then
-            moveDir = moveDir - Vector3.new(0, 1, 0)
-        end
-
-        -- Badan selalu menghadap arah kamera
-        bodyGyro.CFrame = CFrame.new(rootPart.Position)
-            * CFrame.Angles(0, math.atan2(-cam.CFrame.LookVector.X, -cam.CFrame.LookVector.Z), 0)
-
-        if moveDir.Magnitude > 0.05 then
-            bodyVelocity.Velocity = moveDir.Unit * flySpeed
-        else
-            bodyVelocity.Velocity = Vector3.zero
-        end
+    if moveDir.Magnitude > 0.05 then
+        local step = moveDir.Unit * flySpeed * dt
+        local look = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+        rootPart.CFrame = CFrame.lookAt(rootPart.Position + step, rootPart.Position + step + look)
     end
 end)
 
 -- ==========================================
--- LOGIKA NOCLIP & TOMBOL SEMBUNYI
+-- WALK SPEED
 -- ==========================================
-noclipButton.MouseButton1Click:Connect(function()
-    noclipEnabled = not noclipEnabled
-    noclipButton.Text = "NoClip: " .. (noclipEnabled and "ON" or "OFF")
-end)
+walkButton.MouseButton1Click:Connect(function()
+    walkEnabled = not walkEnabled
+    walkButton.Text = "WalkSpeed: " .. (walkEnabled and "ON" or "OFF")
 
-task.spawn(function()
-    while task.wait(0.1) do
-        if noclipEnabled then
-            local character = player.Character
-            if character then
-                for _, part in pairs(character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                    end
-                end
-            end
-        end
-    end
-end)
-
-local function hideMenu()
-    mainFrame.Visible = false
-    floatingBtn.Visible = true
-end
-
-local function showMenu()
-    mainFrame.Visible = true
-    floatingBtn.Visible = false
-end
-
-closeBtn.MouseButton1Click:Connect(hideMenu)
-minBtn.MouseButton1Click:Connect(hideMenu)
-floatingBtn.MouseButton1Click:Connect(showMenu)
-
-print("Delta Script Loaded - Fly Mengikuti Kamera")
+    if not walkEnabled then
+        local character = player.Character
+        local humanoid = char
