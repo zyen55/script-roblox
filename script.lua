@@ -150,49 +150,42 @@ end)
 -- LOGIKA PERGERAKAN ARAH (FIX TOTAL)
 -- ==========================================
 runService.RenderStepped:Connect(function()
-    if flyEnabled then
-        local character = player.Character
-        if not character then return end
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        
-        if humanoid and rootPart and bodyVelocity and bodyGyro then
-            -- Ambil arah input joystick game bawaan
-            local moveVector = humanoid.MoveDirection 
-            local moveDir = Vector3.new(0,0,0)
-            
-            if moveVector.Magnitude > 0 then
-                -- KUNCI PERBAIKAN: Gunakan arah hadap karakter (rootPart), BUKAN kamera
-                local rootCFrame = rootPart.CFrame
-                local forward = rootCFrame.LookVector
-                local right = rootCFrame.RightVector
-                
-                local forwardAmount = moveVector.Z 
-                local rightAmount = moveVector.X
-                
-                -- Maju/Mundur berdasarkan badan, Kanan/Kiri berdasarkan badan
-                moveDir = (forward * forwardAmount) + (right * rightAmount)
-                
-                -- Kunci putaran badan agar mengikuti arah maju (menghindari berputar saat mundur)
-                bodyGyro.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + moveDir)
-            end
+runService.RenderStepped:Connect(function()
+    if not flyEnabled then return end
 
-            -- Naik (Tombol Lompat)
-            if userInput:IsKeyDown(Enum.KeyCode.Space) then
-                moveDir = moveDir + Vector3.new(0, 1, 0)
-            end
-            
-            -- Turun (Tombol GUI)
-            if isDescending then
-                moveDir = moveDir - Vector3.new(0, 1, 0)
-            end
+    local character = player.Character
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    local cam = workspace.CurrentCamera
 
-            -- Aplikasikan kecepatan
-            if moveDir.Magnitude > 0 then
-                bodyVelocity.Velocity = moveDir.Unit * flySpeed
-            else
-                bodyVelocity.Velocity = Vector3.new(0, 0, 0) 
-            end
+    if humanoid and rootPart and bodyVelocity and bodyGyro and cam then
+        -- Ubah arah joystick (world space) ke input maju/kanan relatif kamera
+        local localMove = cam.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
+        local forwardAmount = -localMove.Z  -- maju = positif
+        local rightAmount = localMove.X     -- kanan = positif
+
+        local moveDir = (cam.CFrame.LookVector * forwardAmount)
+                      + (cam.CFrame.RightVector * rightAmount)
+
+        -- Naik (Spasi / tombol lompat)
+        if userInput:IsKeyDown(Enum.KeyCode.Space) or humanoid.Jump then
+            moveDir = moveDir + Vector3.new(0, 1, 0)
+        end
+
+        -- Turun (tombol GUI)
+        if isDescending then
+            moveDir = moveDir - Vector3.new(0, 1, 0)
+        end
+
+        -- Badan selalu menghadap arah kamera (stabil, tidak berputar)
+        bodyGyro.CFrame = CFrame.new(rootPart.Position)
+            * CFrame.Angles(0, math.atan2(-cam.CFrame.LookVector.X, -cam.CFrame.LookVector.Z), 0)
+
+        if moveDir.Magnitude > 0.05 then
+            bodyVelocity.Velocity = moveDir.Unit * flySpeed
+        else
+            bodyVelocity.Velocity = Vector3.zero
         end
     end
 end)
