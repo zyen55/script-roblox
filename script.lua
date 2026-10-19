@@ -1,15 +1,15 @@
--- Skrip Delta Executor (Kontrol Akurat Berdasarkan Arah Badan)
+-- Skrip Delta Executor (Kontrol Fly Mengikuti Kamera)
 local player = game:GetService("Players").LocalPlayer
 local runService = game:GetService("RunService")
 local userInput = game:GetService("UserInputService")
 
 local flyEnabled = false
 local noclipEnabled = false
-local flySpeed = 65 
+local flySpeed = 65
 
 local bodyVelocity = nil
 local bodyGyro = nil
-local isDescending = false 
+local isDescending = false
 
 -- ==========================================
 -- GUI UTAMA
@@ -25,7 +25,7 @@ mainFrame.Position = UDim2.new(0, 20, 0, 100)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
-mainFrame.Draggable = true 
+mainFrame.Draggable = true
 mainFrame.Visible = true
 mainFrame.Parent = screenGui
 
@@ -114,7 +114,7 @@ local function updateFlyPhysics()
     if not character then return end
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    
+
     if flyEnabled and rootPart and humanoid then
         humanoid.PlatformStand = true
         if bodyVelocity then bodyVelocity:Destroy() end
@@ -122,14 +122,13 @@ local function updateFlyPhysics()
 
         bodyVelocity = Instance.new("BodyVelocity")
         bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bodyVelocity.Velocity = Vector3.new(0,0,0)
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
         bodyVelocity.Parent = rootPart
 
         bodyGyro = Instance.new("BodyGyro")
         bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bodyGyro.P = 1000
         bodyGyro.D = 50
-        -- Kunci orientasi badan agar tidak berputar liar
         bodyGyro.CFrame = rootPart.CFrame
         bodyGyro.Parent = rootPart
     else
@@ -147,9 +146,8 @@ flyButton.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- LOGIKA PERGERAKAN ARAH (FIX TOTAL)
+-- LOGIKA PERGERAKAN (MENGIKUTI KAMERA)
 -- ==========================================
-runService.RenderStepped:Connect(function()
 runService.RenderStepped:Connect(function()
     if not flyEnabled then return end
 
@@ -162,8 +160,8 @@ runService.RenderStepped:Connect(function()
     if humanoid and rootPart and bodyVelocity and bodyGyro and cam then
         -- Ubah arah joystick (world space) ke input maju/kanan relatif kamera
         local localMove = cam.CFrame:VectorToObjectSpace(humanoid.MoveDirection)
-        local forwardAmount = -localMove.Z  -- maju = positif
-        local rightAmount = localMove.X     -- kanan = positif
+        local forwardAmount = -localMove.Z
+        local rightAmount = localMove.X
 
         local moveDir = (cam.CFrame.LookVector * forwardAmount)
                       + (cam.CFrame.RightVector * rightAmount)
@@ -178,7 +176,7 @@ runService.RenderStepped:Connect(function()
             moveDir = moveDir - Vector3.new(0, 1, 0)
         end
 
-        -- Badan selalu menghadap arah kamera (stabil, tidak berputar)
+        -- Badan selalu menghadap arah kamera
         bodyGyro.CFrame = CFrame.new(rootPart.Position)
             * CFrame.Angles(0, math.atan2(-cam.CFrame.LookVector.X, -cam.CFrame.LookVector.Z), 0)
 
@@ -227,4 +225,4 @@ closeBtn.MouseButton1Click:Connect(hideMenu)
 minBtn.MouseButton1Click:Connect(hideMenu)
 floatingBtn.MouseButton1Click:Connect(showMenu)
 
-print("Delta Script Loaded - Ultimate Fix Direction")
+print("Delta Script Loaded - Fly Mengikuti Kamera")
