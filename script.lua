@@ -1,15 +1,15 @@
--- Skrip Delta Executor (Fix Kontrol Arah & Mobile)
+-- Skrip Delta Executor (Kontrol Akurat Berdasarkan Arah Badan)
 local player = game:GetService("Players").LocalPlayer
 local runService = game:GetService("RunService")
 local userInput = game:GetService("UserInputService")
 
 local flyEnabled = false
 local noclipEnabled = false
-local flySpeed = 55 -- Kecepatan terbang
+local flySpeed = 65 
 
 local bodyVelocity = nil
 local bodyGyro = nil
-local isDescending = false -- Status untuk tombol turun
+local isDescending = false 
 
 -- ==========================================
 -- GUI UTAMA
@@ -20,7 +20,7 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 220, 0, 200) -- Sedikit dilebarkan untuk tombol turun
+mainFrame.Size = UDim2.new(0, 220, 0, 200)
 mainFrame.Position = UDim2.new(0, 20, 0, 100)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
@@ -78,7 +78,6 @@ noclipButton.Font = Enum.Font.SourceSansBold
 noclipButton.TextSize = 16
 noclipButton.Parent = mainFrame
 
--- TOMBOL TURUN (Khusus Mobile, muncul saat fly ON)
 local descendBtn = Instance.new("TextButton")
 descendBtn.Size = UDim2.new(0.9, 0, 0, 35)
 descendBtn.Position = UDim2.new(0.05, 0, 0, 145)
@@ -103,7 +102,6 @@ floatingBtn.Active = true
 floatingBtn.Draggable = true
 floatingBtn.Parent = screenGui
 
--- Logika Tahan Tombol Turun
 descendBtn.MouseButton1Down:Connect(function() isDescending = true end)
 descendBtn.MouseButton1Up:Connect(function() isDescending = false end)
 descendBtn.MouseLeave:Connect(function() isDescending = false end)
@@ -131,6 +129,7 @@ local function updateFlyPhysics()
         bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bodyGyro.P = 1000
         bodyGyro.D = 50
+        -- Kunci orientasi badan agar tidak berputar liar
         bodyGyro.CFrame = rootPart.CFrame
         bodyGyro.Parent = rootPart
     else
@@ -143,58 +142,57 @@ end
 flyButton.MouseButton1Click:Connect(function()
     flyEnabled = not flyEnabled
     flyButton.Text = "Fly: " .. (flyEnabled and "ON" or "OFF")
-    descendBtn.Visible = flyEnabled -- Tampilkan tombol turun saat fly ON
+    descendBtn.Visible = flyEnabled
     updateFlyPhysics()
 end)
 
 -- ==========================================
--- LOGIKA PERGERAKAN ARAH (FIX TERBALIK)
+-- LOGIKA PERGERAKAN ARAH (FIX TOTAL)
 -- ==========================================
 runService.RenderStepped:Connect(function()
     if flyEnabled then
         local character = player.Character
         if not character then return end
         local humanoid = character:FindFirstChildOfClass("Humanoid")
-        local camera = workspace.CurrentCamera
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
         
-        if humanoid and bodyVelocity and bodyGyro then
-            -- Ambil input joystick (X = Kanan/Kiri, Z = Depan/Belakang)
+        if humanoid and rootPart and bodyVelocity and bodyGyro then
+            -- Ambil arah input joystick game bawaan
             local moveVector = humanoid.MoveDirection 
             local moveDir = Vector3.new(0,0,0)
             
             if moveVector.Magnitude > 0 then
-                local camCFrame = camera.CFrame
-                local forward = camCFrame.LookVector
-                local right = camCFrame.RightVector
+                -- KUNCI PERBAIKAN: Gunakan arah hadap karakter (rootPart), BUKAN kamera
+                local rootCFrame = rootPart.CFrame
+                local forward = rootCFrame.LookVector
+                local right = rootCFrame.RightVector
                 
-                -- PERBAIKAN: Z digunakan untuk maju/mundur, X untuk kanan/kiri
-                -- moveVector.Z bernilai 1 jika maju, -1 jika mundur
                 local forwardAmount = moveVector.Z 
                 local rightAmount = moveVector.X
                 
-                -- Gabungkan arah berdasarkan kamera
+                -- Maju/Mundur berdasarkan badan, Kanan/Kiri berdasarkan badan
                 moveDir = (forward * forwardAmount) + (right * rightAmount)
+                
+                -- Kunci putaran badan agar mengikuti arah maju (menghindari berputar saat mundur)
+                bodyGyro.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + moveDir)
             end
 
-            -- Naik (Tombol Lompat Bawaan)
+            -- Naik (Tombol Lompat)
             if userInput:IsKeyDown(Enum.KeyCode.Space) then
                 moveDir = moveDir + Vector3.new(0, 1, 0)
             end
             
-            -- Turun (Tombol GUI atau Shift di PC)
-            if isDescending or userInput:IsKeyDown(Enum.KeyCode.LeftShift) then
+            -- Turun (Tombol GUI)
+            if isDescending then
                 moveDir = moveDir - Vector3.new(0, 1, 0)
             end
 
-            -- Terapkan kecepatan
+            -- Aplikasikan kecepatan
             if moveDir.Magnitude > 0 then
                 bodyVelocity.Velocity = moveDir.Unit * flySpeed
             else
                 bodyVelocity.Velocity = Vector3.new(0, 0, 0) 
             end
-
-            -- Kunci kamera agar karakter tidak berputar aneh
-            bodyGyro.CFrame = camera.CFrame
         end
     end
 end)
@@ -236,4 +234,4 @@ closeBtn.MouseButton1Click:Connect(hideMenu)
 minBtn.MouseButton1Click:Connect(hideMenu)
 floatingBtn.MouseButton1Click:Connect(showMenu)
 
-print("Delta Script Loaded - Fixed Direction")
+print("Delta Script Loaded - Ultimate Fix Direction")
