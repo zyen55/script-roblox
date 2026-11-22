@@ -189,11 +189,15 @@ ToggleStroke.Parent = ToggleBtn
 -- Main window
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 540, 0, 460)
-MainFrame.Position = UDim2.new(0.5, -270, 0.5, -230)
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(12, 10, 18)
 MainFrame.BorderSizePixel = 0
 MainFrame.ZIndex = 5
 MainFrame.Parent = ScreenGui
+
+local MainScale = Instance.new("UIScale")
+MainScale.Parent = MainFrame
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
 
 local MainStroke = Instance.new("UIStroke")
@@ -263,11 +267,13 @@ MinBtn.Parent = TopBar
 Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
 
 -- Sidebar
-local Sidebar = Instance.new("Frame")
+local Sidebar = Instance.new("ScrollingFrame")
 Sidebar.Size = UDim2.new(0, 140, 1, -48)
 Sidebar.Position = UDim2.new(0, 0, 0, 48)
 Sidebar.BackgroundColor3 = Color3.fromRGB(18, 15, 28)
 Sidebar.BorderSizePixel = 0
+Sidebar.CanvasSize = UDim2.new(0, 0, 0, 240)
+Sidebar.ScrollBarThickness = 0
 Sidebar.ZIndex = 6
 Sidebar.Parent = MainFrame
 
@@ -394,7 +400,9 @@ local function makeDraggable(guiItem, dragHandle)
 
 	UserInputService.InputChanged:Connect(function(input)
 		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			local delta = input.Position - dragStart
+			local scaleObj = guiItem:FindFirstChildOfClass("UIScale")
+			local sc = scaleObj and scaleObj.Scale or 1
+			local delta = (input.Position - dragStart) / sc
 			guiItem.Position = UDim2.new(
 				startPos.X.Scale, startPos.X.Offset + delta.X,
 				startPos.Y.Scale, startPos.Y.Offset + delta.Y
@@ -535,6 +543,7 @@ local function makeDropdown(titleText, itemsTable, orderVal, callback)
 			local absPos = selectBtn.AbsolutePosition
 			local absSize = selectBtn.AbsoluteSize
 			dropList.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSize.Y + 4)
+			dropList.Size = UDim2.new(0, absSize.X, 0, dropList.Size.Y.Offset)
 		end
 	end)
 
@@ -633,6 +642,7 @@ local function makeMultiDropdown(titleText, itemsTable, orderVal, emptyLabel)
 			local absPos = selectBtn.AbsolutePosition
 			local absSize = selectBtn.AbsoluteSize
 			dropList.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSize.Y + 4)
+			dropList.Size = UDim2.new(0, absSize.X, 0, dropList.Size.Y.Offset)
 		end
 	end)
 
@@ -652,7 +662,7 @@ local function makeMultiDropdown(titleText, itemsTable, orderVal, emptyLabel)
 	end
 end
 
-local function makeStepper(prefix, orderVal, initial, minV, maxV, stepV)
+local function makeStepper(prefix, orderVal, initial, minV, maxV, stepV, onChange)
 	local value = initial
 
 	local frame = Instance.new("Frame")
@@ -690,6 +700,7 @@ local function makeStepper(prefix, orderVal, initial, minV, maxV, stepV)
 		btn.MouseButton1Click:Connect(function()
 			value = math.clamp(value + delta, minV, maxV)
 			label.Text = prefix .. ": " .. value
+			if onChange then onChange(value) end
 		end)
 	end
 
@@ -754,6 +765,9 @@ local getSkillKeys = makeMultiDropdown("Skill Keys (PC)", {"Q", "E", "R", "F", "
 local getSkillButtons = makeTextInput("On-screen Skill Buttons (names, comma separated)", 10, "e.g. Skill1, Skill2, Ability")
 local getSkillInterval = makeStepper("Skill Interval (ms)", 11, 300, 50, 3000, 50)
 local skillOnlyFighting = makeFeatureToggle("Skills only while fighting a target", 12)
+local autoAtkSpeed = makeFeatureToggle("Attack Speed Boost (auto-find)", 13)
+local getAtkMult = makeStepper("Attack Speed Multiplier (x)", 14, 2, 1, 20, 0.5)
+local autoNoCooldown = makeFeatureToggle("Zero Cooldown Values (client side)", 15)
 
 -- Collect tab
 currentPanel = pages.Collect
@@ -798,6 +812,28 @@ StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.TextWrapped = true
 StatusLabel.ZIndex = 8
 StatusLabel.Parent = StatusFrame
+
+-- UI size (auto-fits small phone screens in landscape)
+currentPanel = pages.Settings
+local applyUiScale
+local getUiScale = makeStepper("UI Size (%)", 4, 100, 50, 130, 10, function()
+	if applyUiScale then applyUiScale() end
+end)
+
+applyUiScale = function()
+	local cam = Workspace.CurrentCamera
+	local view = cam and cam.ViewportSize or Vector2.new(1280, 720)
+	local auto = math.min(1, (view.X - 16) / 540, (view.Y - 16) / 460)
+	MainScale.Scale = math.clamp(auto * getUiScale() / 100, 0.4, 1.3)
+end
+applyUiScale()
+
+do
+	local cam = Workspace.CurrentCamera
+	if cam then
+		cam:GetPropertyChangedSignal("ViewportSize"):Connect(applyUiScale)
+	end
+end
 
 -- Max time per target + skip
 local TimeFrame = Instance.new("Frame")
@@ -885,7 +921,7 @@ ScanBtn.BackgroundColor3 = Color3.fromRGB(120, 50, 220)
 ScanBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ScanBtn.Font = Enum.Font.GothamBold
 ScanBtn.TextSize = 11
-ScanBtn.Text = "Scan Values"
+ScanBtn.Text = "Scan Nilai"
 ScanBtn.ZIndex = 8
 ScanBtn.Parent = EditFrame
 Instance.new("UICorner", ScanBtn).CornerRadius = UDim.new(0, 6)
@@ -894,7 +930,7 @@ local ScanHint = Instance.new("TextLabel")
 ScanHint.Size = UDim2.new(1, -140, 0, 26)
 ScanHint.Position = UDim2.new(0, 130, 0, 6)
 ScanHint.BackgroundTransparency = 1
-ScanHint.Text = "Stat Editor: edit / lock your values"
+ScanHint.Text = "Editor Stat: ubah / kunci nilai"
 ScanHint.TextColor3 = Color3.fromRGB(150, 145, 175)
 ScanHint.Font = Enum.Font.Gotham
 ScanHint.TextSize = 10
@@ -921,7 +957,7 @@ EditList.Parent = EditScroll
 local EditHint = Instance.new("TextLabel")
 EditHint.Size = UDim2.new(1, -8, 0, 40)
 EditHint.BackgroundTransparency = 1
-EditHint.Text = "Tap Scan Values. Changes only count if the game trusts your client."
+EditHint.Text = "Tekan Scan Nilai. Tombol Tes = coba ubah x2 lalu lihat apakah dikembalikan game/server."
 EditHint.TextColor3 = Color3.fromRGB(150, 145, 175)
 EditHint.Font = Enum.Font.Gotham
 EditHint.TextSize = 10
@@ -1511,10 +1547,11 @@ task.spawn(function()
 	end
 end)
 
--- Stat editor: finds values on your player / character, lets you set or lock them
+-- Stat editor: finds values on your player / character, shows Indonesian names, lets you set, test or lock them
 local scanKeywords = {
 	"damage", "demage", "dmg", "crit", "speed", "attack", "hp", "health", "stamina",
-	"luck", "defense", "armor", "power", "strength", "regen", "range", "trait",
+	"luck", "defense", "armor", "power", "strength", "regen", "range", "trait", "cooldown", "reach",
+	"taken", "incoming", "received", "resist", "reduc", "jump",
 }
 local editEntries = {}
 
@@ -1524,6 +1561,49 @@ local function matchesKeyword(name)
 		if lower:find(kw, 1, true) then return true end
 	end
 	return false
+end
+
+local function stripRoot(path)
+	path = path:gsub("^Players%.[^%.]+%.", "")
+	path = path:gsub("^Workspace%.[^%.]+%.", "")
+	return path
+end
+
+-- Indonesian name for a raw value name (nil if unknown)
+local function indoName(raw)
+	local c = raw:lower():gsub("[^%a]", "")
+	local function has(...)
+		for _, w in ipairs({...}) do
+			if c:find(w, 1, true) then return true end
+		end
+		return false
+	end
+
+	if has("damagetaken", "takendamage", "incomingdamage", "damagereceived", "receiveddamage", "takedamage") then
+		return "Damage Diterima (dari musuh)"
+	end
+	if has("crit") then
+		if has("chance", "rate") then return "Peluang Critical" end
+		if has("dmg", "damage", "mult", "power") then return "Damage Critical" end
+		return "Critical (peluang / damage)"
+	end
+	if has("maxstamina") or (has("stamina") and has("max")) then return "Stamina Maksimum" end
+	if has("stamina") and has("regen") then return "Pemulihan Stamina" end
+	if has("stamina") then return "Stamina" end
+	if has("maxhealth", "maxhp") then return "HP Maksimum" end
+	if has("regen") and has("health", "hp") then return "Pemulihan HP" end
+	if has("health", "hp") then return "HP Sekarang" end
+	if has("attackspeed", "atkspeed", "aspd", "attackrate") then return "Kecepatan Serang" end
+	if has("attackrange", "range", "reach") then return "Jangkauan Serang" end
+	if has("cooldown", "delay") then return "Cooldown (jeda skill)" end
+	if has("walkspeed", "movespeed", "speed") then return "Kecepatan Jalan" end
+	if has("jump") then return "Kekuatan Lompat" end
+	if has("defense", "armor", "resist", "reduc") then return "Pertahanan (Defense)" end
+	if has("luck") then return "Keberuntungan (Luck)" end
+	if has("damage", "dmg", "attack", "power", "strength") then return "Damage Serangan" end
+	if has("trait") then return "Trait" end
+	if has("regen") then return "Pemulihan" end
+	return nil
 end
 
 local function clearEditRows()
@@ -1537,33 +1617,65 @@ local function addEditRow(entry)
 	table.insert(editEntries, entry)
 
 	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, -6, 0, 54)
+	row.Size = UDim2.new(1, -6, 0, 66)
 	row.BackgroundColor3 = Color3.fromRGB(24, 20, 36)
 	row.BorderSizePixel = 0
 	row.ZIndex = 9
 	row.Parent = EditScroll
 	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
 
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, -8, 0, 20)
-	label.Position = UDim2.new(0, 4, 0, 2)
-	label.BackgroundTransparency = 1
-	label.TextColor3 = Color3.fromRGB(210, 205, 235)
-	label.Font = Enum.Font.Gotham
-	label.TextSize = 10
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.TextTruncate = Enum.TextTruncate.AtEnd
-	label.ZIndex = 10
-	label.Parent = row
-	entry.labelObj = label
-	label.Text = entry.label .. " = " .. tostring(entry.get())
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -8, 0, 16)
+	title.Position = UDim2.new(0, 4, 0, 2)
+	title.BackgroundTransparency = 1
+	title.TextColor3 = Color3.fromRGB(235, 225, 255)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 11
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.TextTruncate = Enum.TextTruncate.AtEnd
+	title.ZIndex = 10
+	title.Parent = row
+
+	local rawLabel = Instance.new("TextLabel")
+	rawLabel.Size = UDim2.new(1, -8, 0, 14)
+	rawLabel.Position = UDim2.new(0, 4, 0, 18)
+	rawLabel.BackgroundTransparency = 1
+	rawLabel.TextColor3 = Color3.fromRGB(140, 135, 165)
+	rawLabel.Font = Enum.Font.Gotham
+	rawLabel.TextSize = 9
+	rawLabel.TextXAlignment = Enum.TextXAlignment.Left
+	rawLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	rawLabel.ZIndex = 10
+	rawLabel.Parent = row
+
+	local function refresh()
+		title.Text = entry.indo .. " = " .. tostring(entry.get())
+		rawLabel.Text = (entry.verdict and (entry.verdict .. " | ") or "") .. entry.raw
+	end
+	entry.refresh = refresh
+	refresh()
+
+	local function makeBtn(text, xScale, xOff, wScale, wOff, color)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(wScale, wOff, 0, 26)
+		btn.Position = UDim2.new(xScale, xOff, 0, 36)
+		btn.BackgroundColor3 = color
+		btn.Text = text
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 11
+		btn.ZIndex = 10
+		btn.Parent = row
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+		return btn
+	end
 
 	local box = Instance.new("TextBox")
-	box.Size = UDim2.new(0.4, 0, 0, 26)
-	box.Position = UDim2.new(0, 4, 0, 24)
+	box.Size = UDim2.new(0.3, 0, 0, 26)
+	box.Position = UDim2.new(0, 4, 0, 36)
 	box.BackgroundColor3 = Color3.fromRGB(45, 38, 65)
 	box.TextColor3 = Color3.fromRGB(230, 220, 255)
-	box.PlaceholderText = "new value"
+	box.PlaceholderText = "nilai baru"
 	box.PlaceholderColor3 = Color3.fromRGB(130, 120, 160)
 	box.Text = ""
 	box.ClearTextOnFocus = false
@@ -1573,47 +1685,52 @@ local function addEditRow(entry)
 	box.Parent = row
 	Instance.new("UICorner", box).CornerRadius = UDim.new(0, 5)
 
-	local setBtn = Instance.new("TextButton")
-	setBtn.Size = UDim2.new(0.26, -4, 0, 26)
-	setBtn.Position = UDim2.new(0.4, 4, 0, 24)
-	setBtn.BackgroundColor3 = Color3.fromRGB(120, 50, 220)
-	setBtn.Text = "Set"
-	setBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	setBtn.Font = Enum.Font.GothamBold
-	setBtn.TextSize = 11
-	setBtn.ZIndex = 10
-	setBtn.Parent = row
-	Instance.new("UICorner", setBtn).CornerRadius = UDim.new(0, 5)
-
-	local lockBtn = Instance.new("TextButton")
-	lockBtn.Size = UDim2.new(0.34, -8, 0, 26)
-	lockBtn.Position = UDim2.new(0.66, 4, 0, 24)
-	lockBtn.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
-	lockBtn.Text = "Lock: off"
-	lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	lockBtn.Font = Enum.Font.GothamBold
-	lockBtn.TextSize = 11
-	lockBtn.ZIndex = 10
-	lockBtn.Parent = row
-	Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 5)
+	local setBtn = makeBtn("Set", 0.3, 8, 0.16, -2, Color3.fromRGB(120, 50, 220))
+	local testBtn = makeBtn("Tes", 0.46, 8, 0.2, -2, Color3.fromRGB(60, 120, 200))
+	local lockBtn = makeBtn("Kunci: mati", 0.66, 8, 0.34, -12, Color3.fromRGB(50, 40, 70))
 
 	setBtn.MouseButton1Click:Connect(function()
 		local n = tonumber(box.Text)
 		if n then
 			pcall(entry.set, n)
-			label.Text = entry.label .. " = " .. tostring(entry.get())
+			refresh()
 		end
+	end)
+
+	-- Test: change the value to x2, wait, and see whether the game/server puts it back
+	testBtn.MouseButton1Click:Connect(function()
+		if entry.testing then return end
+		local ok, orig = pcall(entry.get)
+		if not ok or type(orig) ~= "number" then return end
+
+		entry.testing = true
+		local testVal = (orig == 0) and 1 or orig * 2
+		pcall(entry.set, testVal)
+		entry.verdict = "Menguji..."
+		refresh()
+
+		task.delay(1.5, function()
+			local ok2, now = pcall(entry.get)
+			if ok2 and now == testVal then
+				entry.verdict = "BERTAHAN (cek efeknya di game)"
+			else
+				entry.verdict = "DIKEMBALIKAN game/server"
+			end
+			if not entry.locked then pcall(entry.set, orig) end
+			entry.testing = false
+			refresh()
+		end)
 	end)
 
 	lockBtn.MouseButton1Click:Connect(function()
 		entry.locked = not entry.locked
 		if entry.locked then
 			entry.lockValue = tonumber(box.Text) or entry.get()
-			lockBtn.Text = "Lock: on"
+			lockBtn.Text = "Kunci: nyala"
 			lockBtn.BackgroundColor3 = Color3.fromRGB(130, 50, 230)
 		else
 			entry.lockValue = nil
-			lockBtn.Text = "Lock: off"
+			lockBtn.Text = "Kunci: mati"
 			lockBtn.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
 		end
 	end)
@@ -1623,31 +1740,33 @@ ScanBtn.MouseButton1Click:Connect(function()
 	clearEditRows()
 	local count = 0
 
-	local function add(label, getFn, setFn)
-		if count < 60 then
+	local function add(indo, raw, getFn, setFn)
+		if count < 80 then
 			count = count + 1
-			addEditRow({label = label, get = getFn, set = setFn})
+			addEditRow({indo = indo, raw = raw, get = getFn, set = setFn})
 		end
 	end
 
 	local hum = character and character:FindFirstChildOfClass("Humanoid")
 	if hum then
-		add("Humanoid.WalkSpeed", function() return hum.WalkSpeed end, function(v) hum.WalkSpeed = v end)
-		add("Humanoid.MaxHealth", function() return hum.MaxHealth end, function(v) hum.MaxHealth = v end)
-		add("Humanoid.Health", function() return hum.Health end, function(v) hum.Health = v end)
-		add("Humanoid.JumpPower", function() return hum.JumpPower end, function(v) hum.JumpPower = v end)
+		add("Kecepatan Jalan", "Humanoid.WalkSpeed", function() return hum.WalkSpeed end, function(v) hum.WalkSpeed = v end)
+		add("HP Maksimum", "Humanoid.MaxHealth", function() return hum.MaxHealth end, function(v) hum.MaxHealth = v end)
+		add("HP Sekarang", "Humanoid.Health", function() return hum.Health end, function(v) hum.Health = v end)
+		add("Kekuatan Lompat", "Humanoid.JumpPower", function() return hum.JumpPower end, function(v) hum.JumpPower = v end)
 	end
 
 	local function consider(inst)
+		local path = stripRoot(inst:GetFullName())
 		for key, val in pairs(inst:GetAttributes()) do
-			if type(val) == "number" and matchesKeyword(key) then
-				add(inst.Name .. "@" .. key,
+			local raw = path .. "@" .. key
+			if type(val) == "number" and matchesKeyword(raw) then
+				add(indoName(raw) or key, raw,
 					function() return inst:GetAttribute(key) end,
 					function(v) inst:SetAttribute(key, v) end)
 			end
 		end
-		if (inst:IsA("NumberValue") or inst:IsA("IntValue")) and matchesKeyword(inst.Name) then
-			add(inst:GetFullName():gsub("^Players%.", ""),
+		if (inst:IsA("NumberValue") or inst:IsA("IntValue")) and matchesKeyword(path) then
+			add(indoName(path) or inst.Name, path,
 				function() return inst.Value end,
 				function(v) inst.Value = v end)
 		end
@@ -1666,7 +1785,7 @@ ScanBtn.MouseButton1Click:Connect(function()
 		local none = Instance.new("TextLabel")
 		none.Size = UDim2.new(1, -8, 0, 30)
 		none.BackgroundTransparency = 1
-		none.Text = "Nothing found on your player or character."
+		none.Text = "Tidak ada nilai yang ditemukan di player / karaktermu."
 		none.TextColor3 = Color3.fromRGB(150, 145, 175)
 		none.Font = Enum.Font.Gotham
 		none.TextSize = 10
@@ -1682,10 +1801,8 @@ task.spawn(function()
 			if e.locked and e.lockValue ~= nil then
 				pcall(e.set, e.lockValue)
 			end
-			if e.labelObj and e.labelObj.Parent then
-				pcall(function()
-					e.labelObj.Text = e.label .. " = " .. tostring(e.get())
-				end)
+			if e.refresh then
+				pcall(e.refresh)
 			end
 		end
 		task.wait(0.2)
@@ -2000,5 +2117,116 @@ task.spawn(function()
 			end
 		end
 		task.wait(1)
+	end
+end)
+
+-- Attack speed boost + zero cooldown: finds client-side values by name, multiplies / zeroes them, restores them when switched off
+local function makeValueTracker(matchFn)
+	local tracker = {entries = {}, lastScan = 0, active = false}
+	local index = setmetatable({}, {__mode = "k"})
+
+	function tracker.scan()
+		local list = {}
+
+		local function add(inst, key, kind)
+			index[inst] = index[inst] or {}
+			local e = index[inst][key]
+			if not e then
+				e = {inst = inst, key = key}
+				if kind == "attr" then
+					e.get = function() return inst:GetAttribute(key) end
+					e.set = function(v) inst:SetAttribute(key, v) end
+				else
+					e.get = function() return inst.Value end
+					e.set = function(v) inst.Value = v end
+				end
+				e.isInt = inst:IsA("IntValue")
+				e.orig = e.get()
+				index[inst][key] = e
+			end
+			table.insert(list, e)
+		end
+
+		local function consider(inst)
+			local path = inst:GetFullName()
+			for key, val in pairs(inst:GetAttributes()) do
+				if type(val) == "number" and matchFn(path .. "." .. key) then
+					add(inst, key, "attr")
+				end
+			end
+			if (inst:IsA("NumberValue") or inst:IsA("IntValue")) and matchFn(path) then
+				add(inst, "Value", "value")
+			end
+		end
+
+		for _, base in ipairs({player, character}) do
+			if base then
+				consider(base)
+				for _, d in ipairs(base:GetDescendants()) do
+					consider(d)
+				end
+			end
+		end
+
+		tracker.entries = list
+	end
+
+	function tracker.apply(on, targetFn)
+		if on then
+			tracker.active = true
+			if tick() - tracker.lastScan > 3 then
+				tracker.lastScan = tick()
+				pcall(tracker.scan)
+			end
+			for _, e in ipairs(tracker.entries) do
+				if e.inst.Parent then
+					pcall(function()
+						local cur = e.get()
+						if type(cur) ~= "number" then return end
+						-- the game changed it on its own (e.g. an upgrade): treat that as the new original
+						if e.lastSet ~= nil and cur ~= e.lastSet then e.orig = cur end
+						local target = targetFn(e)
+						if e.isInt then target = math.floor(target + 0.5) end
+						if cur ~= target then e.set(target) end
+						e.lastSet = target
+					end)
+				end
+			end
+		elseif tracker.active then
+			for _, e in ipairs(tracker.entries) do
+				if e.lastSet ~= nil and e.inst.Parent then
+					pcall(e.set, e.orig)
+				end
+				e.lastSet = nil
+			end
+			tracker.active = false
+			tracker.lastScan = 0
+		end
+	end
+
+	return tracker
+end
+
+local function cleanPath(path)
+	return (path:lower():gsub("[^%a]", ""))
+end
+
+local atkSpeedTracker = makeValueTracker(function(path)
+	local c = cleanPath(path)
+	return c:find("attackspeed", 1, true) or c:find("atkspeed", 1, true)
+		or c:find("aspd", 1, true) or c:find("attackrate", 1, true)
+end)
+
+local cooldownTracker = makeValueTracker(function(path)
+	local c = cleanPath(path)
+	return c:find("cooldown", 1, true) or c:find("attackdelay", 1, true)
+		or c:find("skilldelay", 1, true) or c:find("atkdelay", 1, true)
+end)
+
+task.spawn(function()
+	while ScreenGui and ScreenGui.Parent do
+		atkSpeedTracker.apply(autoAtkSpeed(), function(e) return e.orig * getAtkMult() end)
+		cooldownTracker.apply(autoNoCooldown(), function() return 0 end)
+		task.wait(0.2)
 	end
 end)
