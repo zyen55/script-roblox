@@ -50,6 +50,36 @@ local trackedTargets = {
 -- Anti-stuck blacklist cache
 local blacklistedTargets = {}
 
+-- Word-based name matching so "ant" matches "Ant" / "AntWorker" but not "Plant" or "Giant"
+local function nameTokens(name)
+	local spaced = name:gsub("(%l)(%u)", "%1 %2")
+	local tokens, joined = {}, ""
+	for word in spaced:lower():gmatch("%a+") do
+		table.insert(tokens, word)
+		joined = joined .. word
+	end
+	return tokens, joined
+end
+
+local function nameMatches(name, keyword)
+	local key = keyword:lower():gsub("%s+", "")
+	local tokens, joined = nameTokens(name)
+	if joined == key then return true end
+	for _, t in ipairs(tokens) do
+		if t == key or t == key .. "s" then return true end
+	end
+	return false
+end
+
+local bugKeywords = {"centipede", "sandscorpion", "ant", "pillbug", "giantpillbug", "caterpillar", "cricket", "stagbeetle"}
+
+local function isBugName(name)
+	for _, kw in ipairs(bugKeywords) do
+		if nameMatches(name, kw) then return true end
+	end
+	return false
+end
+
 local function registerObject(obj)
 	if Players:GetPlayerFromCharacter(obj) or (obj.Parent and Players:GetPlayerFromCharacter(obj.Parent)) then
 		return
@@ -71,14 +101,7 @@ local function registerObject(obj)
 		category = "orb"
 	elseif cleanName:find("emperorscorpion", 1, true) then
 		category = "boss"
-	elseif cleanName:find("centipede", 1, true)
-		or cleanName:find("sandscorpion", 1, true)
-		or cleanName:find("ant", 1, true)
-		or cleanName:find("pillbug", 1, true)
-		or cleanName:find("giantpillbug", 1, true)
-		or cleanName:find("caterpillar", 1, true)
-		or cleanName:find("cricket", 1, true)
-		or cleanName:find("stagbeetle", 1, true) then
+	elseif isBugName(obj.Name) then
 		category = "bug"
 	elseif cleanName:find("acorn", 1, true)
 		or cleanName:find("cocoon", 1, true)
@@ -248,22 +271,10 @@ Sidebar.BorderSizePixel = 0
 Sidebar.ZIndex = 6
 Sidebar.Parent = MainFrame
 
-local TabMainBtn = Instance.new("TextButton")
-TabMainBtn.Size = UDim2.new(1, -16, 0, 36)
-TabMainBtn.Position = UDim2.new(0, 8, 0, 10)
-TabMainBtn.BackgroundColor3 = Color3.fromRGB(120, 50, 220)
-TabMainBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-TabMainBtn.Font = Enum.Font.GothamBold
-TabMainBtn.TextSize = 12
-TabMainBtn.Text = "🏠 Main"
-TabMainBtn.ZIndex = 7
-TabMainBtn.Parent = Sidebar
-Instance.new("UICorner", TabMainBtn).CornerRadius = UDim.new(0, 8)
-
 -- Content panel with auto layout
 local ContentPanel = Instance.new("ScrollingFrame")
-ContentPanel.Size = UDim2.new(1, -152, 1, -60)
-ContentPanel.Position = UDim2.new(0, 148, 0, 52)
+ContentPanel.Size = UDim2.new(1, -152, 1, -126)
+ContentPanel.Position = UDim2.new(0, 148, 0, 122)
 ContentPanel.BackgroundTransparency = 1
 ContentPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
 ContentPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -282,6 +293,74 @@ local function closeAllDropdowns()
 	for _, drop in ipairs(activeDropdowns) do
 		drop.Visible = false
 	end
+end
+
+-- Tabs and pages
+local function makePage()
+	local page = Instance.new("ScrollingFrame")
+	page.Size = UDim2.new(1, -152, 1, -126)
+	page.Position = UDim2.new(0, 148, 0, 122)
+	page.BackgroundTransparency = 1
+	page.BorderSizePixel = 0
+	page.CanvasSize = UDim2.new(0, 0, 0, 0)
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.ScrollBarThickness = 4
+	page.ZIndex = 6
+	page.Visible = false
+	page.Parent = MainFrame
+
+	local list = Instance.new("UIListLayout")
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Padding = UDim.new(0, 8)
+	list.Parent = page
+	return page
+end
+
+local pages = {
+	Combat = ContentPanel,
+	Collect = makePage(),
+	Movement = makePage(),
+	Player = makePage(),
+	Settings = makePage(),
+}
+local currentPanel = pages.Combat
+
+local tabButtons = {}
+
+local function selectTab(name)
+	closeAllDropdowns()
+	for tabName, page in pairs(pages) do
+		page.Visible = (tabName == name)
+	end
+	for tabName, btn in pairs(tabButtons) do
+		btn.BackgroundColor3 = (tabName == name) and Color3.fromRGB(120, 50, 220) or Color3.fromRGB(35, 30, 55)
+	end
+end
+
+local tabList = {
+	{"Combat", "⚔ Combat"},
+	{"Collect", "💎 Collect"},
+	{"Movement", "🏃 Movement"},
+	{"Player", "👤 Player"},
+	{"Settings", "⚙ Settings"},
+}
+
+for i, info in ipairs(tabList) do
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -16, 0, 36)
+	btn.Position = UDim2.new(0, 8, 0, 10 + (i - 1) * 44)
+	btn.BackgroundColor3 = Color3.fromRGB(35, 30, 55)
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 12
+	btn.Text = info[2]
+	btn.ZIndex = 7
+	btn.Parent = Sidebar
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+	btn.MouseButton1Click:Connect(function()
+		selectTab(info[1])
+	end)
+	tabButtons[info[1]] = btn
 end
 
 -- Minimize / reopen
@@ -334,7 +413,7 @@ local function makeFeatureToggle(labelText, orderVal)
 	row.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
 	row.LayoutOrder = orderVal
 	row.ZIndex = 7
-	row.Parent = ContentPanel
+	row.Parent = currentPanel
 	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
 
 	local label = Instance.new("TextLabel")
@@ -389,7 +468,7 @@ local function makeDropdown(titleText, itemsTable, orderVal, callback)
 	container.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
 	container.LayoutOrder = orderVal
 	container.ZIndex = 7
-	container.Parent = ContentPanel
+	container.Parent = currentPanel
 	Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
 
 	local label = Instance.new("TextLabel")
@@ -468,13 +547,13 @@ local function makeDropdown(titleText, itemsTable, orderVal, callback)
 	return function() return currentIndex end
 end
 
-local function makeMultiDropdown(titleText, itemsTable, orderVal)
+local function makeMultiDropdown(titleText, itemsTable, orderVal, emptyLabel)
 	local container = Instance.new("Frame")
 	container.Size = UDim2.new(1, -8, 0, 44)
 	container.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
 	container.LayoutOrder = orderVal
 	container.ZIndex = 7
-	container.Parent = ContentPanel
+	container.Parent = currentPanel
 	Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
 
 	local label = Instance.new("TextLabel")
@@ -497,7 +576,7 @@ local function makeMultiDropdown(titleText, itemsTable, orderVal)
 	selectBtn.TextColor3 = Color3.fromRGB(200, 150, 255)
 	selectBtn.Font = Enum.Font.GothamBold
 	selectBtn.TextSize = 11
-	selectBtn.Text = "All ▾"
+	selectBtn.Text = (emptyLabel or "All") .. " ▾"
 	selectBtn.ZIndex = 8
 	selectBtn.Parent = container
 	Instance.new("UICorner", selectBtn).CornerRadius = UDim.new(0, 6)
@@ -521,7 +600,7 @@ local function makeMultiDropdown(titleText, itemsTable, orderVal)
 	local function refreshText()
 		local n = 0
 		for _ in pairs(selected) do n = n + 1 end
-		selectBtn.Text = (n == 0 and "All" or (n .. " selected")) .. " ▾"
+		selectBtn.Text = (n == 0 and (emptyLabel or "All") or (n .. " selected")) .. " ▾"
 	end
 
 	for i, itemName in ipairs(itemsTable) do
@@ -573,41 +652,138 @@ local function makeMultiDropdown(titleText, itemsTable, orderVal)
 	end
 end
 
+local function makeStepper(prefix, orderVal, initial, minV, maxV, stepV)
+	local value = initial
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, -8, 0, 56)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
+	frame.LayoutOrder = orderVal
+	frame.ZIndex = 7
+	frame.Parent = currentPanel
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 0, 22)
+	label.Position = UDim2.new(0, 10, 0, 4)
+	label.BackgroundTransparency = 1
+	label.Text = prefix .. ": " .. value
+	label.TextColor3 = Color3.fromRGB(200, 200, 220)
+	label.Font = Enum.Font.GothamMedium
+	label.TextSize = 12
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 8
+	label.Parent = frame
+
+	local function makeBtn(text, xPos, delta)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(0, 75, 0, 24)
+		btn.Position = xPos
+		btn.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
+		btn.Text = text
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 11
+		btn.ZIndex = 8
+		btn.Parent = frame
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+		btn.MouseButton1Click:Connect(function()
+			value = math.clamp(value + delta, minV, maxV)
+			label.Text = prefix .. ": " .. value
+		end)
+	end
+
+	makeBtn("-" .. stepV, UDim2.new(0, 10, 0, 26), -stepV)
+	makeBtn("+" .. stepV, UDim2.new(1, -85, 0, 26), stepV)
+
+	return function() return value end
+end
+
+local function makeTextInput(titleText, orderVal, placeholder)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, -8, 0, 66)
+	frame.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
+	frame.LayoutOrder = orderVal
+	frame.ZIndex = 7
+	frame.Parent = currentPanel
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -20, 0, 22)
+	label.Position = UDim2.new(0, 10, 0, 4)
+	label.BackgroundTransparency = 1
+	label.Text = titleText
+	label.TextColor3 = Color3.fromRGB(220, 215, 240)
+	label.Font = Enum.Font.GothamMedium
+	label.TextSize = 12
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 8
+	label.Parent = frame
+
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(1, -20, 0, 28)
+	box.Position = UDim2.new(0, 10, 0, 30)
+	box.BackgroundColor3 = Color3.fromRGB(45, 38, 65)
+	box.TextColor3 = Color3.fromRGB(230, 220, 255)
+	box.PlaceholderText = placeholder or ""
+	box.PlaceholderColor3 = Color3.fromRGB(130, 120, 160)
+	box.Text = ""
+	box.ClearTextOnFocus = false
+	box.Font = Enum.Font.Gotham
+	box.TextSize = 11
+	box.TextXAlignment = Enum.TextXAlignment.Left
+	box.ZIndex = 8
+	box.Parent = frame
+	Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+
+	return function() return box.Text end
+end
+
 -- Build controls
+-- Combat tab
+currentPanel = pages.Combat
+local autoBoss = makeFeatureToggle("Auto Mini Boss (Emperor Scorpion)", 1)
+local autoBugs = makeFeatureToggle("Auto Farm Bugs", 2)
+local getBugSel = makeMultiDropdown("Bug Types (none = all)", bugTypes, 3)
+local autoPriority = makeFeatureToggle("Prioritize Highest-Tier Bugs", 4)
+local autoBreakables = makeFeatureToggle("Auto Farm Breakables", 5)
+local getBreakSel = makeMultiDropdown("Breakables (none = all)", breakableTypes, 6)
+local autoTweenToggle = makeFeatureToggle("Smooth Tween Movement Mode", 7)
+local autoSkill = makeFeatureToggle("Auto Skills (spam, no waiting)", 8)
+local getSkillKeys = makeMultiDropdown("Skill Keys (PC)", {"Q", "E", "R", "F", "Z", "X", "C", "V", "1", "2", "3", "4"}, 9, "None")
+local getSkillButtons = makeTextInput("On-screen Skill Buttons (names, comma separated)", 10, "e.g. Skill1, Skill2, Ability")
+local getSkillInterval = makeStepper("Skill Interval (ms)", 11, 300, 50, 3000, 50)
+local skillOnlyFighting = makeFeatureToggle("Skills only while fighting a target", 12)
+
+-- Collect tab
+currentPanel = pages.Collect
 local autoOrbs = makeFeatureToggle("Auto Orbs", 1)
 local autoSandOrbs = makeFeatureToggle("Auto SandOrbs", 2)
 local autoVoidOrbs = makeFeatureToggle("Auto VoidOrbs", 3)
 
-local autoBugs = makeFeatureToggle("Auto Farm Bugs", 4)
-local getBugSel = makeMultiDropdown("Bug Types (none = all)", bugTypes, 5)
+-- Movement tab
+currentPanel = pages.Movement
+local autoSpeed = makeFeatureToggle("Speed Boost (WalkSpeed)", 1)
+local getSpeedValue = makeStepper("Walk Speed", 2, 50, 16, 300, 10)
+local autoSpeedCF = makeFeatureToggle("Speed: CFrame Mode (if WalkSpeed resets)", 3)
+local autoFly = makeFeatureToggle("Fly (look + move to steer)", 4)
+local getFlySpeed = makeStepper("Fly Speed", 5, 60, 10, 300, 10)
 
-local autoBoss = makeFeatureToggle("Auto Mini Boss (Emperor Scorpion)", 6)
+-- Player tab
+currentPanel = pages.Player
+local autoStamina = makeFeatureToggle("Unlimited Stamina", 1)
+local autoRespawn = makeFeatureToggle("Auto Respawn & Continue", 2)
+local autoFps = makeFeatureToggle("Low Graphics Mode (FPS Boost)", 3)
+local autoClickBtns = makeFeatureToggle("Auto Click Buttons (upgrade / trait / evolve)", 4)
+local getClickNames = makeTextInput("Button Names to Click (comma separated)", 5, "e.g. Upgrade, Evolve, Claim")
 
-local autoBreakables = makeFeatureToggle("Auto Farm Breakables", 7)
-local getBreakSel = makeMultiDropdown("Breakables (none = all)", breakableTypes, 8)
-
-local autoTweenToggle = makeFeatureToggle("Smooth Tween Movement Mode", 9)
-
--- Level-up reward picker
-local statNames = {"Damage", "Critical Chance", "Max HP", "Max Stamina", "Speed"}
-local selectedStatIndex = 1
-local autoPickStat = makeFeatureToggle("Auto Pick Level-Up Stat", 11)
-local getStatTier = makeDropdown("Preferred Stat", statNames, 12, function(idx)
-	selectedStatIndex = idx
-end)
-
-local autoPriority = makeFeatureToggle("Prioritize Highest-Tier Bugs", 13)
-local autoCollectNear = makeFeatureToggle("Collect Nearby Orbs While Fighting", 14)
-local autoRespawn = makeFeatureToggle("Auto Respawn & Continue", 15)
-local autoFps = makeFeatureToggle("Low Graphics Mode (FPS Boost)", 16)
-
--- Status panel (top of the list)
+-- Status strip (always visible above the pages)
 local StatusFrame = Instance.new("Frame")
-StatusFrame.Size = UDim2.new(1, -8, 0, 48)
+StatusFrame.Size = UDim2.new(1, -156, 0, 64)
 StatusFrame.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
-StatusFrame.LayoutOrder = 0
+StatusFrame.Position = UDim2.new(0, 148, 0, 52)
 StatusFrame.ZIndex = 7
-StatusFrame.Parent = ContentPanel
+StatusFrame.Parent = MainFrame
 Instance.new("UICorner", StatusFrame).CornerRadius = UDim.new(0, 8)
 
 local StatusLabel = Instance.new("TextLabel")
@@ -623,14 +799,84 @@ StatusLabel.TextWrapped = true
 StatusLabel.ZIndex = 8
 StatusLabel.Parent = StatusFrame
 
--- Stat scanner
-local ScanFrame = Instance.new("Frame")
-ScanFrame.Size = UDim2.new(1, -8, 0, 170)
-ScanFrame.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
-ScanFrame.LayoutOrder = 17
-ScanFrame.ZIndex = 7
-ScanFrame.Parent = ContentPanel
-Instance.new("UICorner", ScanFrame).CornerRadius = UDim.new(0, 8)
+-- Max time per target + skip
+local TimeFrame = Instance.new("Frame")
+TimeFrame.Size = UDim2.new(1, -8, 0, 88)
+TimeFrame.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
+TimeFrame.LayoutOrder = 2
+TimeFrame.ZIndex = 7
+TimeFrame.Parent = pages.Settings
+Instance.new("UICorner", TimeFrame).CornerRadius = UDim.new(0, 8)
+
+local TimeLabel = Instance.new("TextLabel")
+TimeLabel.Size = UDim2.new(1, 0, 0, 22)
+TimeLabel.Position = UDim2.new(0, 10, 0, 4)
+TimeLabel.BackgroundTransparency = 1
+TimeLabel.Text = "Max Time Per Target: 30s"
+TimeLabel.TextColor3 = Color3.fromRGB(200, 200, 220)
+TimeLabel.Font = Enum.Font.GothamMedium
+TimeLabel.TextSize = 12
+TimeLabel.TextXAlignment = Enum.TextXAlignment.Left
+TimeLabel.ZIndex = 8
+TimeLabel.Parent = TimeFrame
+
+local TimeMinus = Instance.new("TextButton")
+TimeMinus.Size = UDim2.new(0, 75, 0, 24)
+TimeMinus.Position = UDim2.new(0, 10, 0, 26)
+TimeMinus.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
+TimeMinus.Text = "-5s"
+TimeMinus.TextColor3 = Color3.fromRGB(255, 255, 255)
+TimeMinus.Font = Enum.Font.GothamBold
+TimeMinus.TextSize = 11
+TimeMinus.ZIndex = 8
+TimeMinus.Parent = TimeFrame
+Instance.new("UICorner", TimeMinus).CornerRadius = UDim.new(0, 6)
+
+local TimePlus = Instance.new("TextButton")
+TimePlus.Size = UDim2.new(0, 75, 0, 24)
+TimePlus.Position = UDim2.new(1, -85, 0, 26)
+TimePlus.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
+TimePlus.Text = "+5s"
+TimePlus.TextColor3 = Color3.fromRGB(255, 255, 255)
+TimePlus.Font = Enum.Font.GothamBold
+TimePlus.TextSize = 11
+TimePlus.ZIndex = 8
+TimePlus.Parent = TimeFrame
+Instance.new("UICorner", TimePlus).CornerRadius = UDim.new(0, 6)
+
+local SkipBtn = Instance.new("TextButton")
+SkipBtn.Size = UDim2.new(0.5, -15, 0, 26)
+SkipBtn.Position = UDim2.new(0, 10, 0, 56)
+SkipBtn.BackgroundColor3 = Color3.fromRGB(120, 50, 220)
+SkipBtn.Text = "Skip Target"
+SkipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SkipBtn.Font = Enum.Font.GothamBold
+SkipBtn.TextSize = 11
+SkipBtn.ZIndex = 8
+SkipBtn.Parent = TimeFrame
+Instance.new("UICorner", SkipBtn).CornerRadius = UDim.new(0, 6)
+
+local IgnoreBtn = Instance.new("TextButton")
+IgnoreBtn.Size = UDim2.new(0.5, -15, 0, 26)
+IgnoreBtn.Position = UDim2.new(0.5, 5, 0, 56)
+IgnoreBtn.BackgroundColor3 = Color3.fromRGB(190, 60, 80)
+IgnoreBtn.Text = "Ignore This Name"
+IgnoreBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+IgnoreBtn.Font = Enum.Font.GothamBold
+IgnoreBtn.TextSize = 11
+IgnoreBtn.ZIndex = 8
+IgnoreBtn.Parent = TimeFrame
+Instance.new("UICorner", IgnoreBtn).CornerRadius = UDim.new(0, 6)
+
+-- Stat editor (Player tab)
+currentPanel = pages.Player
+local EditFrame = Instance.new("Frame")
+EditFrame.Size = UDim2.new(1, -8, 0, 300)
+EditFrame.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
+EditFrame.LayoutOrder = 6
+EditFrame.ZIndex = 7
+EditFrame.Parent = currentPanel
+Instance.new("UICorner", EditFrame).CornerRadius = UDim.new(0, 8)
 
 local ScanBtn = Instance.new("TextButton")
 ScanBtn.Size = UDim2.new(0, 110, 0, 26)
@@ -639,56 +885,57 @@ ScanBtn.BackgroundColor3 = Color3.fromRGB(120, 50, 220)
 ScanBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ScanBtn.Font = Enum.Font.GothamBold
 ScanBtn.TextSize = 11
-ScanBtn.Text = "Scan Stats"
+ScanBtn.Text = "Scan Values"
 ScanBtn.ZIndex = 8
-ScanBtn.Parent = ScanFrame
+ScanBtn.Parent = EditFrame
 Instance.new("UICorner", ScanBtn).CornerRadius = UDim.new(0, 6)
 
 local ScanHint = Instance.new("TextLabel")
 ScanHint.Size = UDim2.new(1, -140, 0, 26)
 ScanHint.Position = UDim2.new(0, 130, 0, 6)
 ScanHint.BackgroundTransparency = 1
-ScanHint.Text = "Finds damage / crit / speed values"
+ScanHint.Text = "Stat Editor: edit / lock your values"
 ScanHint.TextColor3 = Color3.fromRGB(150, 145, 175)
 ScanHint.Font = Enum.Font.Gotham
 ScanHint.TextSize = 10
 ScanHint.TextXAlignment = Enum.TextXAlignment.Left
 ScanHint.ZIndex = 8
-ScanHint.Parent = ScanFrame
+ScanHint.Parent = EditFrame
 
-local ScanScroll = Instance.new("ScrollingFrame")
-ScanScroll.Size = UDim2.new(1, -20, 1, -44)
-ScanScroll.Position = UDim2.new(0, 10, 0, 36)
-ScanScroll.BackgroundColor3 = Color3.fromRGB(14, 12, 22)
-ScanScroll.BorderSizePixel = 0
-ScanScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-ScanScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ScanScroll.ScrollBarThickness = 3
-ScanScroll.ZIndex = 8
-ScanScroll.Parent = ScanFrame
+local EditScroll = Instance.new("ScrollingFrame")
+EditScroll.Size = UDim2.new(1, -20, 1, -44)
+EditScroll.Position = UDim2.new(0, 10, 0, 36)
+EditScroll.BackgroundColor3 = Color3.fromRGB(14, 12, 22)
+EditScroll.BorderSizePixel = 0
+EditScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+EditScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+EditScroll.ScrollBarThickness = 3
+EditScroll.ZIndex = 8
+EditScroll.Parent = EditFrame
 
-local ScanResult = Instance.new("TextLabel")
-ScanResult.Size = UDim2.new(1, -8, 0, 0)
-ScanResult.Position = UDim2.new(0, 4, 0, 2)
-ScanResult.AutomaticSize = Enum.AutomaticSize.Y
-ScanResult.BackgroundTransparency = 1
-ScanResult.Text = "Tap Scan Stats to list matching values."
-ScanResult.TextColor3 = Color3.fromRGB(200, 200, 220)
-ScanResult.Font = Enum.Font.Gotham
-ScanResult.TextSize = 10
-ScanResult.TextWrapped = true
-ScanResult.TextXAlignment = Enum.TextXAlignment.Left
-ScanResult.TextYAlignment = Enum.TextYAlignment.Top
-ScanResult.ZIndex = 9
-ScanResult.Parent = ScanScroll
+local EditList = Instance.new("UIListLayout")
+EditList.SortOrder = Enum.SortOrder.LayoutOrder
+EditList.Padding = UDim.new(0, 4)
+EditList.Parent = EditScroll
+
+local EditHint = Instance.new("TextLabel")
+EditHint.Size = UDim2.new(1, -8, 0, 40)
+EditHint.BackgroundTransparency = 1
+EditHint.Text = "Tap Scan Values. Changes only count if the game trusts your client."
+EditHint.TextColor3 = Color3.fromRGB(150, 145, 175)
+EditHint.Font = Enum.Font.Gotham
+EditHint.TextSize = 10
+EditHint.TextWrapped = true
+EditHint.ZIndex = 9
+EditHint.Parent = EditScroll
 
 -- Cooldown adjuster
 local CDFrame = Instance.new("Frame")
 CDFrame.Size = UDim2.new(1, -8, 0, 56)
 CDFrame.BackgroundColor3 = Color3.fromRGB(20, 17, 30)
-CDFrame.LayoutOrder = 10
+CDFrame.LayoutOrder = 1
 CDFrame.ZIndex = 7
-CDFrame.Parent = ContentPanel
+CDFrame.Parent = pages.Settings
 Instance.new("UICorner", CDFrame).CornerRadius = UDim.new(0, 8)
 
 local CDLabel = Instance.new("TextLabel")
@@ -737,6 +984,8 @@ Plus.MouseButton1Click:Connect(function()
 	CDLabel.Text = "Cooldown: " .. tostring(cooldown) .. "s"
 end)
 
+selectTab("Combat")
+
 -- Floating button only reopens the window
 ToggleBtn.MouseButton1Click:Connect(function()
 	MainFrame.Visible = true
@@ -744,6 +993,10 @@ ToggleBtn.MouseButton1Click:Connect(function()
 end)
 
 local forceRetarget = false  -- set when the character dies so the loop picks a fresh target
+local skipRequested = false  -- set by the Skip Target button
+local ignoreRequested = false  -- set by the Ignore Name button
+local fightingNow = false  -- true while locked on a bug/boss/breakable
+local ignoredNames = {}  -- lowercase names the player told the script to ignore
 
 -- Core movement logic: teleport once, then stay on the target until it dies
 local STAY_DISTANCE = 15      -- re-teleport only if the target moved farther than this (studs)
@@ -805,14 +1058,56 @@ local function isGone(obj, category)
 	return false
 end
 
+local function isDeadState(obj)
+	local hum = obj:FindFirstChildOfClass("Humanoid")
+	if hum and hum.Health <= 0 then return true end
+	local healthVal = obj:FindFirstChild("Health")
+	if healthVal and healthVal:IsA("ValueBase") and type(healthVal.Value) == "number" and healthVal.Value <= 0 then
+		return true
+	end
+	return false
+end
+
 local function getBugRank(obj)
-	local clean = obj.Name:lower():gsub("%s+", "")
 	local rank = 0
 	for i, name in ipairs(bugTypes) do
-		local key = name:lower():gsub("%s+", "")
-		if clean:find(key, 1, true) then rank = i end
+		if nameMatches(obj.Name, name) then rank = i end
 	end
 	return rank
+end
+
+local excludedWords = {"spawn", "zone", "area", "trigger", "region", "marker", "hitbox", "boundary", "detector", "portal", "checkpoint", "template"}
+
+local function hasExcludedWord(name)
+	local lower = name:lower()
+	for _, w in ipairs(excludedWords) do
+		if lower:find(w, 1, true) then return true end
+	end
+	return false
+end
+
+-- Filters out decoys: spawners/zones, invisible parts, loose sub-parts of a tracked model, ignored names
+local function isCandidateOk(obj, category)
+	if ignoredNames[obj.Name:lower()] then return false end
+
+	if category == "bug" or category == "boss" or category == "breakable" then
+		if hasExcludedWord(obj.Name) then return false end
+
+		local node = obj.Parent
+		while node and node ~= Workspace do
+			if hasExcludedWord(node.Name) then return false end
+			node = node.Parent
+		end
+
+		local parent = obj.Parent
+		if obj:IsA("BasePart") and parent and parent:IsA("Model") and trackedTargets[category][parent] then
+			return false
+		end
+
+		if not isVisible(obj) then return false end
+	end
+
+	return true
 end
 
 -- targetNames: nil, a single name, or a list of names (empty list = no filter)
@@ -840,17 +1135,15 @@ local function getClosest(category, yOffset, targetNames, usePriority)
 			local nameMatch = true
 			if filters then
 				nameMatch = false
-				local objNameLower = obj.Name:lower():gsub("%s+", "")
 				for _, wanted in ipairs(filters) do
-					local cleanTarget = wanted:lower():gsub("%s+", "")
-					if objNameLower:find(cleanTarget, 1, true) then
+					if nameMatches(obj.Name, wanted) then
 						nameMatch = true
 						break
 					end
 				end
 			end
 
-			if nameMatch then
+			if nameMatch and isCandidateOk(obj, category) then
 				local targetPart = nil
 				if obj:IsA("BasePart") then
 					targetPart = obj
@@ -924,51 +1217,66 @@ end
 
 local startTick = tick()
 local killCount = 0
-local ORB_RANGE = 60
-local touchedOrbs = setmetatable({}, {__mode = "k"})
-
-local function formatTime(sec)
-	sec = math.floor(sec)
-	return string.format("%02d:%02d:%02d", math.floor(sec / 3600), math.floor((sec % 3600) / 60), sec % 60)
-end
-
--- Collect orbs near you without leaving the target (needs firetouchinterest in your executor)
-local function collectNearbyOrbs(root)
-	if not firetouchinterest then return end
-	local now = tick()
-	for _, cat in ipairs({"orb", "sandorb", "voidorb"}) do
-		for o in pairs(trackedTargets[cat]) do
-			if o.Parent and not blacklistedTargets[o] and (not touchedOrbs[o] or now - touchedOrbs[o] > 3) then
-				local p = getTargetPart(o)
-				if p and (root.Position - p.Position).Magnitude <= ORB_RANGE then
-					touchedOrbs[o] = now
-					pcall(function()
-						firetouchinterest(root, p, 0)
-						firetouchinterest(root, p, 1)
-					end)
-				end
-			end
-		end
-	end
-end
-
 task.spawn(function()
 	local currentObj, currentCategory, currentY, targetStart = nil, nil, 0, 0
+	local manualPauseUntil = 0
 
 	local function step()
 		local root = character and character:FindFirstChild("HumanoidRootPart")
+
+		local lockInfo = ""
 
 		if forceRetarget then
 			currentObj = nil
 			forceRetarget = false
 		end
 
-		if root then
+		if skipRequested then
+			if currentObj then blacklistedTargets[currentObj] = true end
+			currentObj = nil
+			skipRequested = false
+		end
+
+		if ignoreRequested then
+			if currentObj then
+				ignoredNames[currentObj.Name:lower()] = true
+				blacklistedTargets[currentObj] = true
+			end
+			currentObj = nil
+			ignoreRequested = false
+		end
+
+		-- Manual movement: release the target and pause auto-teleport for a few seconds
+		local humCtl = character and character:FindFirstChildOfClass("Humanoid")
+		if humCtl and humCtl.MoveDirection.Magnitude > 0.1 then
+			manualPauseUntil = tick() + 3
+			if currentObj then
+				blacklistedTargets[currentObj] = true
+				currentObj = nil
+			end
+		end
+
+		-- Release the lock when the matching feature (or every farm feature) is switched off
+		local categoryToggle = {
+			orb = autoOrbs, sandorb = autoSandOrbs, voidorb = autoVoidOrbs,
+			boss = autoBoss, bug = autoBugs, breakable = autoBreakables,
+		}
+		if currentObj then
+			local toggleFn = categoryToggle[currentCategory]
+			if not toggleFn or not toggleFn() then
+				currentObj = nil
+			end
+		end
+
+		if root and tick() >= manualPauseUntil then
 			-- Still locked on a target: stay on it until it is gone
 			if currentObj then
 				local isOrb = (currentCategory == "orb" or currentCategory == "sandorb" or currentCategory == "voidorb")
 				local limit = isOrb and ORB_TIMEOUT or FIGHT_TIMEOUT
 				local gone = isGone(currentObj, currentCategory)
+				lockInfo = string.format(" (%s, %ds left)",
+					isDeadState(currentObj) and "carcass" or "alive",
+					math.max(0, math.floor(limit - (tick() - targetStart))))
 
 				if gone or (tick() - targetStart) >= limit then
 					if gone and not isOrb then
@@ -980,9 +1288,6 @@ task.spawn(function()
 					local part = getTargetPart(currentObj)
 					if part and (root.Position - part.Position).Magnitude > STAY_DISTANCE then
 						pcall(teleportTo, part.CFrame + Vector3.new(0, currentY, 0))
-					end
-					if not isOrb and autoCollectNear() then
-						collectNearbyOrbs(root)
 					end
 				end
 			end
@@ -997,9 +1302,13 @@ task.spawn(function()
 			end
 		end
 
+		fightingNow = currentObj ~= nil
+			and (currentCategory == "bug" or currentCategory == "boss" or currentCategory == "breakable")
+
 		StatusLabel.Text = string.format(
 			"Target: %s\nDone: %d  |  Time: %s",
-			currentObj and (currentCategory .. " - " .. currentObj.Name) or "searching...",
+			(tick() < manualPauseUntil) and "paused (manual move)"
+				or (currentObj and (currentCategory .. " - " .. currentObj.Name .. " [" .. (currentObj.Parent and currentObj.Parent.Name or "?") .. "]" .. lockInfo) or "searching..."),
 			killCount,
 			formatTime(tick() - startTick)
 		)
@@ -1012,15 +1321,7 @@ task.spawn(function()
 	end
 end)
 
--- Auto pick level-up stat: reads the visible choice buttons and clicks the preferred stat
-local statClassifiers = {
-	{name = "Critical Chance", kw = {"critical", "crit"}},
-	{name = "Max HP", kw = {"max hp", "maxhp", "max health", "maxhealth"}},
-	{name = "Max Stamina", kw = {"stamina"}},
-	{name = "Speed", kw = {"speed"}},
-	{name = "Damage", kw = {"damage", "demage", "dmg"}},
-}
-
+-- GUI helpers (used by Auto Respawn)
 local function isGuiVisible(obj)
 	local node = obj
 	while node and node ~= game do
@@ -1065,15 +1366,6 @@ local function getCardText(btn)
 	return ""
 end
 
-local function classifyStat(text)
-	for _, c in ipairs(statClassifiers) do
-		for _, kw in ipairs(c.kw) do
-			if text:find(kw, 1, true) then return c.name end
-		end
-	end
-	return nil
-end
-
 local function clickGui(btn)
 	local fired = false
 	if getconnections then
@@ -1103,43 +1395,6 @@ local function clickGui(btn)
 		end)
 	end
 end
-
-task.spawn(function()
-	local playerGui = player:WaitForChild("PlayerGui")
-
-	while ScreenGui and ScreenGui.Parent do
-		if autoPickStat() then
-			local offers, distinct = {}, 0
-
-			for _, d in ipairs(playerGui:GetDescendants()) do
-				if d:IsA("GuiButton") and not d:IsDescendantOf(ScreenGui) and isGuiVisible(d) then
-					local stat = classifyStat(getCardText(d))
-					if stat and not offers[stat] then
-						offers[stat] = d
-						distinct = distinct + 1
-					end
-				end
-			end
-
-			-- Only act when a real choice is on screen (2+ different stat options)
-			if distinct >= 2 then
-				local order = {statNames[getStatTier()]}
-				for _, name in ipairs(statNames) do
-					if name ~= order[1] then table.insert(order, name) end
-				end
-
-				for _, name in ipairs(order) do
-					if offers[name] then
-						pcall(clickGui, offers[name])
-						break
-					end
-				end
-				task.wait(2)
-			end
-		end
-		task.wait(0.7)
-	end
-end)
 
 -- Anti-AFK
 pcall(function()
@@ -1256,8 +1511,12 @@ task.spawn(function()
 	end
 end)
 
--- Stat scanner: lists values/attributes whose names look like damage / crit / speed / hp / stamina
-local scanKeywords = {"damage", "demage", "dmg", "crit", "speed", "attack", "hp", "health", "stamina"}
+-- Stat editor: finds values on your player / character, lets you set or lock them
+local scanKeywords = {
+	"damage", "demage", "dmg", "crit", "speed", "attack", "hp", "health", "stamina",
+	"luck", "defense", "armor", "power", "strength", "regen", "range", "trait",
+}
+local editEntries = {}
 
 local function matchesKeyword(name)
 	local lower = tostring(name):lower()
@@ -1267,40 +1526,479 @@ local function matchesKeyword(name)
 	return false
 end
 
+local function clearEditRows()
+	for _, child in ipairs(EditScroll:GetChildren()) do
+		if child ~= EditList then child:Destroy() end
+	end
+	editEntries = {}
+end
+
+local function addEditRow(entry)
+	table.insert(editEntries, entry)
+
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -6, 0, 54)
+	row.BackgroundColor3 = Color3.fromRGB(24, 20, 36)
+	row.BorderSizePixel = 0
+	row.ZIndex = 9
+	row.Parent = EditScroll
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -8, 0, 20)
+	label.Position = UDim2.new(0, 4, 0, 2)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(210, 205, 235)
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 10
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextTruncate = Enum.TextTruncate.AtEnd
+	label.ZIndex = 10
+	label.Parent = row
+	entry.labelObj = label
+	label.Text = entry.label .. " = " .. tostring(entry.get())
+
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0.4, 0, 0, 26)
+	box.Position = UDim2.new(0, 4, 0, 24)
+	box.BackgroundColor3 = Color3.fromRGB(45, 38, 65)
+	box.TextColor3 = Color3.fromRGB(230, 220, 255)
+	box.PlaceholderText = "new value"
+	box.PlaceholderColor3 = Color3.fromRGB(130, 120, 160)
+	box.Text = ""
+	box.ClearTextOnFocus = false
+	box.Font = Enum.Font.Gotham
+	box.TextSize = 11
+	box.ZIndex = 10
+	box.Parent = row
+	Instance.new("UICorner", box).CornerRadius = UDim.new(0, 5)
+
+	local setBtn = Instance.new("TextButton")
+	setBtn.Size = UDim2.new(0.26, -4, 0, 26)
+	setBtn.Position = UDim2.new(0.4, 4, 0, 24)
+	setBtn.BackgroundColor3 = Color3.fromRGB(120, 50, 220)
+	setBtn.Text = "Set"
+	setBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	setBtn.Font = Enum.Font.GothamBold
+	setBtn.TextSize = 11
+	setBtn.ZIndex = 10
+	setBtn.Parent = row
+	Instance.new("UICorner", setBtn).CornerRadius = UDim.new(0, 5)
+
+	local lockBtn = Instance.new("TextButton")
+	lockBtn.Size = UDim2.new(0.34, -8, 0, 26)
+	lockBtn.Position = UDim2.new(0.66, 4, 0, 24)
+	lockBtn.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
+	lockBtn.Text = "Lock: off"
+	lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lockBtn.Font = Enum.Font.GothamBold
+	lockBtn.TextSize = 11
+	lockBtn.ZIndex = 10
+	lockBtn.Parent = row
+	Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 5)
+
+	setBtn.MouseButton1Click:Connect(function()
+		local n = tonumber(box.Text)
+		if n then
+			pcall(entry.set, n)
+			label.Text = entry.label .. " = " .. tostring(entry.get())
+		end
+	end)
+
+	lockBtn.MouseButton1Click:Connect(function()
+		entry.locked = not entry.locked
+		if entry.locked then
+			entry.lockValue = tonumber(box.Text) or entry.get()
+			lockBtn.Text = "Lock: on"
+			lockBtn.BackgroundColor3 = Color3.fromRGB(130, 50, 230)
+		else
+			entry.lockValue = nil
+			lockBtn.Text = "Lock: off"
+			lockBtn.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
+		end
+	end)
+end
+
 ScanBtn.MouseButton1Click:Connect(function()
-	local lines = {}
-	local function add(path, value)
-		if #lines < 60 then
-			table.insert(lines, path .. " = " .. tostring(value))
+	clearEditRows()
+	local count = 0
+
+	local function add(label, getFn, setFn)
+		if count < 60 then
+			count = count + 1
+			addEditRow({label = label, get = getFn, set = setFn})
 		end
 	end
 
 	local hum = character and character:FindFirstChildOfClass("Humanoid")
 	if hum then
-		add("Humanoid.WalkSpeed", hum.WalkSpeed)
-		add("Humanoid.Health/MaxHealth", hum.Health .. " / " .. hum.MaxHealth)
+		add("Humanoid.WalkSpeed", function() return hum.WalkSpeed end, function(v) hum.WalkSpeed = v end)
+		add("Humanoid.MaxHealth", function() return hum.MaxHealth end, function(v) hum.MaxHealth = v end)
+		add("Humanoid.Health", function() return hum.Health end, function(v) hum.Health = v end)
+		add("Humanoid.JumpPower", function() return hum.JumpPower end, function(v) hum.JumpPower = v end)
+	end
+
+	local function consider(inst)
+		for key, val in pairs(inst:GetAttributes()) do
+			if type(val) == "number" and matchesKeyword(key) then
+				add(inst.Name .. "@" .. key,
+					function() return inst:GetAttribute(key) end,
+					function(v) inst:SetAttribute(key, v) end)
+			end
+		end
+		if (inst:IsA("NumberValue") or inst:IsA("IntValue")) and matchesKeyword(inst.Name) then
+			add(inst:GetFullName():gsub("^Players%.", ""),
+				function() return inst.Value end,
+				function(v) inst.Value = v end)
+		end
 	end
 
 	for _, base in ipairs({player, character}) do
 		if base then
-			for k, v in pairs(base:GetAttributes()) do
-				if matchesKeyword(k) then add(base:GetFullName() .. "@" .. k, v) end
-			end
+			consider(base)
 			for _, d in ipairs(base:GetDescendants()) do
-				if d:IsA("ValueBase") and matchesKeyword(d.Name) then
-					add(d:GetFullName(), d.Value)
-				end
-				for k, v in pairs(d:GetAttributes()) do
-					if matchesKeyword(k) then add(d:GetFullName() .. "@" .. k, v) end
-				end
+				consider(d)
 			end
 		end
 	end
 
-	if #lines == 0 then
-		ScanResult.Text = "Nothing found on your player or character."
-	else
-		ScanResult.Text = table.concat(lines, "\n") .. "\n\nNote: these are your client's copies. If the server owns the real values, changing them has no effect."
-		for _, line in ipairs(lines) do print("[DAUSHUB scan] " .. line) end
+	if count == 0 then
+		local none = Instance.new("TextLabel")
+		none.Size = UDim2.new(1, -8, 0, 30)
+		none.BackgroundTransparency = 1
+		none.Text = "Nothing found on your player or character."
+		none.TextColor3 = Color3.fromRGB(150, 145, 175)
+		none.Font = Enum.Font.Gotham
+		none.TextSize = 10
+		none.TextWrapped = true
+		none.ZIndex = 9
+		none.Parent = EditScroll
+	end
+end)
+
+task.spawn(function()
+	while ScreenGui and ScreenGui.Parent do
+		for _, e in ipairs(editEntries) do
+			if e.locked and e.lockValue ~= nil then
+				pcall(e.set, e.lockValue)
+			end
+			if e.labelObj and e.labelObj.Parent then
+				pcall(function()
+					e.labelObj.Text = e.label .. " = " .. tostring(e.get())
+				end)
+			end
+		end
+		task.wait(0.2)
+	end
+end)
+
+-- Max time per target + skip handlers
+TimeMinus.MouseButton1Click:Connect(function()
+	FIGHT_TIMEOUT = math.max(5, FIGHT_TIMEOUT - 5)
+	TimeLabel.Text = "Max Time Per Target: " .. FIGHT_TIMEOUT .. "s"
+end)
+
+TimePlus.MouseButton1Click:Connect(function()
+	FIGHT_TIMEOUT = math.min(180, FIGHT_TIMEOUT + 5)
+	TimeLabel.Text = "Max Time Per Target: " .. FIGHT_TIMEOUT .. "s"
+end)
+
+SkipBtn.MouseButton1Click:Connect(function()
+	skipRequested = true
+end)
+
+-- Speed boost + fly
+local speedHum, speedOrig, speedConn = nil, nil, nil
+local flyBV, flyBG = nil, nil
+
+local function stopFly()
+	if flyBV then flyBV:Destroy() flyBV = nil end
+	if flyBG then flyBG:Destroy() flyBG = nil end
+	local hum = character and character:FindFirstChildOfClass("Humanoid")
+	if hum then hum.PlatformStand = false end
+end
+
+RunService.Heartbeat:Connect(function(dt)
+	if not ScreenGui.Parent then
+		stopFly()
+		return
+	end
+
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local hum = character and character:FindFirstChildOfClass("Humanoid")
+	local cam = Workspace.CurrentCamera
+
+	-- Speed boost (restores the original speed when switched off)
+	if autoSpeed() and hum then
+		if speedHum ~= hum then
+			if speedConn then speedConn:Disconnect() end
+			speedHum = hum
+			speedOrig = hum.WalkSpeed
+			-- If the game resets WalkSpeed, put our value back immediately
+			speedConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+				if autoSpeed() and hum.WalkSpeed ~= getSpeedValue() then
+					hum.WalkSpeed = getSpeedValue()
+				end
+			end)
+		end
+		if hum.WalkSpeed ~= getSpeedValue() then
+			hum.WalkSpeed = getSpeedValue()
+		end
+	elseif speedHum then
+		if speedConn then
+			speedConn:Disconnect()
+			speedConn = nil
+		end
+		if speedHum.Parent then
+			speedHum.WalkSpeed = speedOrig or 16
+		end
+		speedHum = nil
+	end
+
+	-- CFrame speed mode: adds extra movement on top of the normal speed (for games that keep resetting WalkSpeed)
+	if autoSpeedCF() and root and hum and hum.Health > 0 and not autoFly() and hum.MoveDirection.Magnitude > 0.1 then
+		local extra = math.max(0, getSpeedValue() - 16)
+		root.CFrame = root.CFrame + hum.MoveDirection * (extra * dt)
+	end
+
+	-- Fly: move with the stick / WASD, steer up and down with the camera angle (Space / Shift also work on PC)
+	if autoFly() and root and hum and cam and hum.Health > 0 then
+		if not flyBV or flyBV.Parent ~= root then
+			stopFly()
+			flyBV = Instance.new("BodyVelocity")
+			flyBV.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+			flyBV.Velocity = Vector3.new(0, 0, 0)
+			flyBV.Parent = root
+
+			flyBG = Instance.new("BodyGyro")
+			flyBG.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+			flyBG.P = 9e4
+			flyBG.Parent = root
+		end
+
+		hum.PlatformStand = true
+
+		local rel = cam.CFrame:VectorToObjectSpace(hum.MoveDirection)
+		local dir = cam.CFrame.LookVector * (-rel.Z) + cam.CFrame.RightVector * rel.X
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+			dir = dir + Vector3.new(0, 1, 0)
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+			dir = dir - Vector3.new(0, 1, 0)
+		end
+
+		flyBV.Velocity = dir * getFlySpeed()
+		flyBG.CFrame = cam.CFrame
+	elseif flyBV then
+		stopFly()
+	end
+end)
+
+IgnoreBtn.MouseButton1Click:Connect(function()
+	ignoreRequested = true
+end)
+
+-- Unlimited stamina (works when stamina is stored as a Value or Attribute on your player or character)
+local staminaTargets = {}
+local lastStaminaScan = 0
+local lastStaminaCount = -1
+
+local function scanStamina()
+	local found = {}
+
+	local function consider(inst)
+		local attrs = inst:GetAttributes()
+		for key, val in pairs(attrs) do
+			local lk = key:lower()
+			if type(val) == "number" and lk:find("stamina", 1, true) and not lk:find("max", 1, true) then
+				local maxKey = nil
+				for k2, v2 in pairs(attrs) do
+					local l2 = k2:lower()
+					if type(v2) == "number" and l2:find("stamina", 1, true) and l2:find("max", 1, true) then
+						maxKey = k2
+					end
+				end
+				table.insert(found, {
+					inst = inst,
+					seen = val,
+					get = function() return inst:GetAttribute(key) end,
+					set = function(v) inst:SetAttribute(key, v) end,
+					max = maxKey and function() return inst:GetAttribute(maxKey) end or nil,
+				})
+			end
+		end
+
+		if inst:IsA("NumberValue") or inst:IsA("IntValue") then
+			local ln = inst.Name:lower()
+			if ln:find("stamina", 1, true) and not ln:find("max", 1, true) then
+				local maxObj = nil
+				if inst.Parent then
+					for _, sib in ipairs(inst.Parent:GetChildren()) do
+						local ls = sib.Name:lower()
+						if (sib:IsA("NumberValue") or sib:IsA("IntValue")) and ls:find("stamina", 1, true) and ls:find("max", 1, true) then
+							maxObj = sib
+						end
+					end
+				end
+				table.insert(found, {
+					inst = inst,
+					seen = inst.Value,
+					get = function() return inst.Value end,
+					set = function(v) inst.Value = v end,
+					max = maxObj and function() return maxObj.Value end or nil,
+				})
+			end
+		end
+	end
+
+	for _, base in ipairs({player, character}) do
+		if base then
+			consider(base)
+			for _, d in ipairs(base:GetDescendants()) do
+				consider(d)
+			end
+		end
+	end
+
+	staminaTargets = found
+	if #found ~= lastStaminaCount then
+		lastStaminaCount = #found
+		print("[DAUSHUB] stamina values found: " .. #found)
+	end
+end
+
+RunService.Heartbeat:Connect(function()
+	if not autoStamina() then
+		lastStaminaScan = 0
+		return
+	end
+
+	if tick() - lastStaminaScan > 3 then
+		lastStaminaScan = tick()
+		pcall(scanStamina)
+	end
+
+	for _, t in ipairs(staminaTargets) do
+		if t.inst and t.inst.Parent then
+			pcall(function()
+				local cur = t.get()
+				if type(cur) ~= "number" then return end
+				if cur > t.seen then t.seen = cur end
+				local goal = t.max and t.max() or t.seen
+				if type(goal) == "number" and cur < goal then
+					t.set(goal)
+				end
+			end)
+		end
+	end
+end)
+
+-- Auto skills: re-fires your skills as soon as the game allows (the game's own cooldown still applies)
+local skillVIM = nil
+pcall(function() skillVIM = game:GetService("VirtualInputManager") end)
+
+local skillKeyCodes = {
+	Q = Enum.KeyCode.Q, E = Enum.KeyCode.E, R = Enum.KeyCode.R, F = Enum.KeyCode.F,
+	Z = Enum.KeyCode.Z, X = Enum.KeyCode.X, C = Enum.KeyCode.C, V = Enum.KeyCode.V,
+	["1"] = Enum.KeyCode.One, ["2"] = Enum.KeyCode.Two, ["3"] = Enum.KeyCode.Three, ["4"] = Enum.KeyCode.Four,
+}
+
+local skillButtons = {}
+local lastSkillButtonScan = 0
+
+local function parseKeywords(text)
+	local list = {}
+	for part in tostring(text):gmatch("[^,]+") do
+		local kw = part:lower():gsub("^%s+", ""):gsub("%s+$", "")
+		if kw ~= "" then table.insert(list, kw) end
+	end
+	return list
+end
+
+local function refreshSkillButtons(keywords)
+	skillButtons = {}
+	if #keywords == 0 then return end
+	for _, d in ipairs(player.PlayerGui:GetDescendants()) do
+		if d:IsA("GuiButton") and not d:IsDescendantOf(ScreenGui) then
+			local hay = (d.Name .. " " .. getCardText(d)):lower()
+			for _, kw in ipairs(keywords) do
+				if hay:find(kw, 1, true) then
+					table.insert(skillButtons, d)
+					break
+				end
+			end
+		end
+	end
+end
+
+task.spawn(function()
+	while ScreenGui and ScreenGui.Parent do
+		if autoSkill() and (not skillOnlyFighting() or fightingNow) then
+			-- Keyboard keys
+			if skillVIM then
+				for _, key in ipairs(getSkillKeys()) do
+					local code = skillKeyCodes[key]
+					if code then
+						pcall(function()
+							skillVIM:SendKeyEvent(true, code, false, game)
+							task.wait(0.03)
+							skillVIM:SendKeyEvent(false, code, false, game)
+						end)
+					end
+				end
+			end
+
+			-- On-screen buttons (mobile)
+			local keywords = parseKeywords(getSkillButtons())
+			if #keywords > 0 then
+				if tick() - lastSkillButtonScan > 2 then
+					lastSkillButtonScan = tick()
+					pcall(refreshSkillButtons, keywords)
+				end
+				for _, btn in ipairs(skillButtons) do
+					if btn.Parent and isGuiVisible(btn) then
+						pcall(clickGui, btn)
+					end
+				end
+			end
+		end
+		task.wait(math.max(0.05, getSkillInterval() / 1000))
+	end
+end)
+
+-- Auto click buttons (upgrades / trait choices / evolve / claim ...)
+local clickCache = {}
+local lastClickScan = 0
+
+task.spawn(function()
+	while ScreenGui and ScreenGui.Parent do
+		if autoClickBtns() then
+			local keywords = parseKeywords(getClickNames())
+			if #keywords > 0 then
+				if tick() - lastClickScan > 1.5 then
+					lastClickScan = tick()
+					clickCache = {}
+					pcall(function()
+						for _, d in ipairs(player.PlayerGui:GetDescendants()) do
+							if d:IsA("GuiButton") and not d:IsDescendantOf(ScreenGui) then
+								local hay = (d.Name .. " " .. getCardText(d)):lower()
+								for _, kw in ipairs(keywords) do
+									if hay:find(kw, 1, true) then
+										table.insert(clickCache, d)
+										break
+									end
+								end
+							end
+						end
+					end)
+				end
+				for _, btn in ipairs(clickCache) do
+					if btn.Parent and isGuiVisible(btn) then
+						pcall(clickGui, btn)
+					end
+				end
+			end
+		end
+		task.wait(1)
 	end
 end)
